@@ -1,0 +1,182 @@
+#!/bin/sh
+export POSIXLY_CORRECT=yes
+program_date=`date +"%Y-%m-%d"`   
+
+# Error if global variable WEDI_RC is not set 
+if [ -z "$WEDI_RC" ];then
+    echo "WEDI_RC is not set, please set WEDI_RC to continue" >&2 
+    exit 1
+fi
+
+# Check if path, which user write exist,
+# if not, create path for WEDI_RC 
+if ! [ -d "$WEDI_RC" ];then
+    DIR=${WEDI_RC%/*}
+    FILE=${WEDI_RC##*/} 
+    install -d "$DIR"
+    touch $DIR/$FILE
+fi
+
+# Setting editor, if editor is not set by the user, editor opens vi 
+if [ -z "$EDITOR" ];then
+    if [ -z "$VISUAL" ];then
+        EDITOR=vi
+    else
+        EDITOR="$VISUAL"
+    fi
+else
+        EDITOR="$EDITOR"
+fi
+
+# Realpath check, if realpath is install on user computer
+if [ -z "$(which realpath)" ];then
+   echo "Realpath missing, please install realpath to continue" >&2
+   exit 1
+fi
+
+###########################################################################
+###########################################################################
+
+# function open_file, opens already exist file
+open_file()
+{
+    if [ -f "$arg1" ];then
+        p_path="$(realpath "$arg1")"
+        add_log "$p_path" || echo "Error while logging to WEDI_RC" >&2
+        $EDITOR "$p_path" || echo "Editor error" >&2
+    exit 0    
+   
+    else
+        echo "File does not exist" >&2  
+        exit 1
+    fi   
+}
+
+# function add_log add information of a file path and 
+# date when the log is create to variable WEDI_RC  
+add_log()
+{
+    echo "$1|$program_date" >> "$WEDI_RC" || echo "error, while adding log to WEDI_RC" >&2 
+}
+
+# function open last edited file, which was edited,
+# in actual folder, or in folder, which path you choose 
+last_log()
+{
+    if [ "$an" = 0 ];then
+        p_path=$PWD            
+        file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$" | sed -n '1!G;h;$p' | cut -f1 -d '|' | head -n 1)
+        if [ -z $file ];then
+            echo "Chyba"
+        else
+                    add_log "$file" || echo "Error while logging to WEDI_RC" >&2       
+            "$EDITOR" "$file"
+            exit 0
+        fi
+    fi
+
+    if [ "$an" = 1 ];then
+            file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$" | sed -n '1!G;h;$p' | cut -f1 -d '|' | head -n 1)
+        if [ -z "$file" ];then
+            echo "Error files were not edited already" 
+            exit 1
+        else 
+               add_log "$file" || echo "Error while logging to WEDI_RC" >&2       
+            "$EDITOR" "$file"
+        exit 0         
+        fi    
+    fi   
+}
+
+# function prints all edited file to standard output,
+# in actual folder, or in folder, which path you choose 
+print_all_edited_files()
+{
+    if [ "$an" = 2 ];then
+        file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$" | cut -f1 -d '|' | sort | uniq)
+        echo "$file"
+        exit 0
+    fi
+
+    if [ "$an" = 1 ];then
+        p_path="$PWD"
+        file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$" | cut -f1 -d '|' | sort | uniq)
+        echo "$file"
+        exit 0
+    fi
+
+}
+
+# function open most edited file, which was edited,
+# in actual folder, or folder, which path you choose
+most_edited_file()
+{
+    if [ "$an" = 1 ];then
+    file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$"| cut -f1 -d "|" | uniq -c | sort | tail -n 1 | awk '{print $2}')
+        if [ -f "$file" ];then
+    add_log "$file" || echo "Error while logging to WEDI_RC" >&2       
+    "$EDITOR" "$file"
+    exit 0
+        else
+        echo "Most edited file is not exist" >&2    
+        exit 1
+        fi
+    fi
+
+    if [ $an = 2 ];then
+        file=$(cat "$WEDI_RC" | grep "$p_path/[^/]*$"| cut -f1 -d "|" | uniq -c | sort | tail -n 1 | awk '{print $2}')   
+        if [ -f "$file" ];then
+            add_log "$file" || echo "Error while logging to WEDI_RC" >&2          
+            "$EDITOR" "$file"
+            exit 0
+        
+        else
+            echo "Most edited file is not exist" >&2    
+            exit 1
+        fi
+    fi
+}
+
+######################################################################################
+######################################################################################
+
+# Processing arguments
+if [ "$1" = "-m" ];then
+    an="$#"
+    if [ "$#" -eq 1 ];then
+        p_path="$PWD"           
+        most_edited_file "$p_path"
+        exit 0
+    elif [ -d "$p_path" ];then
+        p_path="$2"            
+        most_edited_file "$p_path"
+        exit 0
+    else
+        echo "Most edited file is not exist" >&2
+        exit 1
+    fi
+fi
+
+if [ "$1" = "-l" ];then
+    an="$#"    
+    p_path="$2"
+    print_all_edited_files "$an" "$p_path" 
+fi 
+
+if [ "$#" -eq 0 -o 1 ];then
+    if [ "$#" -eq 0 ];then
+        an="$#"    
+        last_log "$an" "p_path" 
+    fi
+    
+    if [ $# -eq 1 ]&&[ -d "$1" ];then
+        an=$#    
+        p_path="$1"
+        last_log "$an" "p_path"  
+    fi
+    
+    if [ $# -eq 1 ];then
+        arg1="$1" 
+        open_file "$1"        
+    fi    
+fi
